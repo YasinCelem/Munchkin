@@ -218,6 +218,20 @@ impl Default for SatisfactionSolverOptions {
 }
 
 impl ConstraintSatisfactionSolver {
+    /// Conclude the proof with the unsatisfiable claim.
+    ///
+    /// This method will finish the proof. Any new operation will not be logged to the proof.
+    pub fn conclude_proof_unsat(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    /// Conclude the proof with the optimality claim.
+    ///
+    /// This method will finish the proof. Any new operation will not be logged to the proof.
+    pub fn conclude_proof_optimal(&mut self, _bound: Literal) -> std::io::Result<()> {
+        Ok(())
+    }
+
     /// Process the stored domain events. If no events were present, this returns false. Otherwise,
     /// true is returned.
     fn process_domain_events(&mut self) -> bool {

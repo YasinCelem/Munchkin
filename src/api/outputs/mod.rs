@@ -9,6 +9,7 @@ use crate::branching::Brancher;
 use crate::termination::TerminationCondition;
 #[cfg(doc)]
 use crate::Solver;
+pub(crate) mod solution_callback_arguments;
 
 /// The result of a call to [`Solver::satisfy`].
 #[derive(Debug)]

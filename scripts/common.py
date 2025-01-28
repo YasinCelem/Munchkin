@@ -110,7 +110,10 @@ def check_runs(context: Context):
             print(f"{bcolors.FAIL}\t{wrong_optimality_instance}{bcolors.ENDC}")
 
 
-def check_run(run: Path, model: ModelType, optimal_values: dict) -> RunError | None:
+def check_run(run: Path, model: ModelType, optimal_values: dict) -> bool:
+    """
+        Returns true if there were errors
+    """
     instance_name = run.stem
 
     print(f"Checking {instance_name} for {model}")

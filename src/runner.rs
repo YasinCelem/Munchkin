@@ -10,6 +10,8 @@ use crate::model::IntVariable;
 use crate::model::Model;
 use crate::model::Output;
 use crate::model::VariableMap;
+use crate::optimisation::upper_bounding_search::UpperBoundingSearch;
+use crate::optimisation::OptimisationStrategy;
 use crate::options::SolverOptions;
 use crate::results::OptimisationResult;
 use crate::results::ProblemSolution;
@@ -49,6 +51,10 @@ pub enum Action<SearchStrategies: OptionEnum> {
         /// The search strategy to use.
         #[arg(short = 'S', long = "search", value_enum, default_value_t)]
         search_strategy: SearchStrategies,
+
+        /// The optimisation strategy which is used by the solver
+        #[arg(short = 'O', long = "optimisation", value_enum, default_value_t)]
+        optimisation_strategy: OptimisationStrategy,
 
         /// The number of seconds the solver is allowed to run.
         time_out: u64,
@@ -114,11 +120,13 @@ where
             globals,
             proof_path,
             search_strategy,
+            optimisation_strategy,
             time_out,
         } => solve(
             model,
             instance,
             search_strategy,
+            optimisation_strategy,
             globals,
             proof_path,
             Duration::from_secs(time_out),
@@ -131,6 +139,7 @@ pub fn solve<SearchStrategies>(
     model: Model,
     instance: impl Problem<SearchStrategies>,
     search_strategy: SearchStrategies,
+    optimisation_strategy: OptimisationStrategy,
     globals: Vec<Globals>,
     _proof_path: Option<PathBuf>,
     time_out: Duration,
@@ -146,8 +155,9 @@ pub fn solve<SearchStrategies>(
     let callback_solver_variables = solver_variables.clone();
 
     solver.with_solution_callback(move |solution| {
+        solution.log_statistics();
         for output in &output_variables {
-            print_output(output, &callback_solver_variables, solution);
+            print_output(output, &callback_solver_variables, solution.solution);
         }
 
         println!("----------");
@@ -157,7 +167,19 @@ pub fn solve<SearchStrategies>(
     let mut time_budget = TimeBudget::starting_now(time_out);
     let objective_variable = solver_variables.to_solver_variable(instance.objective());
 
-    match solver.minimise(&mut brancher, &mut time_budget, objective_variable) {
+    let result = match optimisation_strategy {
+        OptimisationStrategy::UpperBounding => solver.optimise(
+            &mut brancher,
+            &mut time_budget,
+            objective_variable,
+            crate::solver::OptimisationDirection::Minimise,
+            UpperBoundingSearch,
+        ),
+        OptimisationStrategy::LowerBounding => todo!(),
+        OptimisationStrategy::CoreGuided => todo!(),
+    };
+
+    match result {
         // Printing of the solution is handled in the callback.
         OptimisationResult::Optimal(_) => println!("=========="),
         OptimisationResult::Satisfiable(_) => {}
