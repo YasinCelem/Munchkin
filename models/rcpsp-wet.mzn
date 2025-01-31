@@ -56,7 +56,7 @@ set of int: Times = 0..(t_max - 1);     % Possible start times
 %-----------------------------------------------------------------------------%
 % Model variables.
 
-array [Tasks] of var Times: s;  % The start times
+array [Tasks] of var Times: Start;  % The start times
 var 0..sum(i in Tasks) (
     max(
         deadline[i, 2] * deadline[i, 1],
@@ -72,7 +72,7 @@ var 0..sum(i in Tasks) (
 constraint
    forall ( i in Tasks, j in suc[i] )
    (
-         s[i] + d[i] <= s[j]
+         Start[i] + d[i] <= Start[j]
    );
 
     % Redundant non-overlapping constraints
@@ -82,7 +82,7 @@ constraint
         forall ( i, j in Tasks where i < j )
         (
             if exists(r in Res)(rr[r, i] + rr[r, j] > rc[r]) then
-                s[i] + d[i] <= s[j]   \/ s[j] + d[j] <= s[i]
+                Start[i] + d[i] <= Start[j]   \/ Start[j] + d[j] <= Start[i]
             else
                 true
             endif
@@ -102,7 +102,7 @@ constraint
         } in (
             if RTasks != {} /\ sum_rr > rc[r] then
                 cumulative(
-                    [ s[i] | i in RTasks ],
+                    [ Start[i] | i in RTasks ],
                     [ d[i] | i in RTasks ],
                     [ rr[r, i] | i in RTasks ],
                     rc[r]
@@ -117,22 +117,22 @@ constraint
 constraint
     Objective = sum (i in Tasks) (
         % earliness
-        deadline[i, 2] * max(0, deadline[i, 1] - s[i]) +
+        deadline[i, 2] * max(0, deadline[i, 1] - Start[i]) +
         % tardiness
-        deadline[i, 3] * max(0, s[i] - deadline[i, 1])
+        deadline[i, 3] * max(0, Start[i] - deadline[i, 1])
     );
 
 %-----------------------------------------------------------------------------%
 % Objective.
 
 solve
-   :: int_search( s, first_fail, indomain_min, complete )
+   :: int_search( Start, first_fail, indomain_min, complete )
    minimize Objective;
 
 %-----------------------------------------------------------------------------%
 
 output [
-    "s = \(s);\n",
+    "s = \(Start);\n",
     "Objective = \(Objective);\n",
 ];
 
