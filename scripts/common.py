@@ -7,9 +7,9 @@ import shutil
 import json
 
 
-MODELS = ["tsp", "rcpsp", "rcpsp"]
+MODELS = ["tsp", "rcpsp", "rcpsp-wet"]
 
-ModelType = Union[Literal["tsp"], Literal["rcpsp"]] 
+ModelType = Union[Literal["tsp"], Literal["rcpsp"], Literal["rcpsp-wet"]] 
 
 DATA_DIR = (Path(__file__).parent / ".." / "data").resolve()
 EXPERIMENT_DIR = (Path(__file__).parent / ".." / "experiments").resolve()
@@ -17,11 +17,13 @@ EXPERIMENT_DIR = (Path(__file__).parent / ".." / "experiments").resolve()
 INSTANCES = {
     "tsp": (DATA_DIR / "tsp"),
     "rcpsp": (DATA_DIR / "rcpsp"),
+    "rcpsp-wet": (DATA_DIR / "rcpsp-wet")
 }
 
 MINIZINC_MODELS = {
     "tsp": (Path(__file__).parent / ".." / "models" / "tsp.mzn").resolve(),
     "rcpsp": (Path(__file__).parent / ".." / "models" / "rcpsp.mzn").resolve(),
+    "rcpsp-wet": (Path(__file__).parent / ".." / "models" / "rcpsp-wet.mzn").resolve()
 }
 
 SOLUTION_SEPARATOR = "-" * 10

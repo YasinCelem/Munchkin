@@ -38,7 +38,7 @@ def compute_optimal_values(args: Args):
             return
 
         objective_line = next(
-            (line for line in result.stdout.splitlines() if line.startswith("_objective")), 
+            (line for line in result.stdout.splitlines() if line.startswith("Objective")), 
             None
         )
 
@@ -48,7 +48,7 @@ def compute_optimal_values(args: Args):
             print(result.stdout)
             return
 
-        objective_value = int(objective_line.removeprefix("_objective = ").removesuffix(";"))
+        objective_value = int(objective_line.removeprefix("Objective = ").removesuffix(";"))
         print(f"  Optimal objective = {objective_value}")
         optimal_values[instance.stem] = objective_value
 
