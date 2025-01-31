@@ -86,7 +86,8 @@ impl Problem<SearchStrategies> for RcpspWet {
             .array_2d::<i32>("deadline", [num_tasks as usize, 3])
             .ok_or_else(|| anyhow::anyhow!("Missing 2d int array 'deadline' in data file."))?;
 
-        let start_times = model.new_interval_variable_array("Start", 0, horizon, num_tasks_usize);
+        let start_times =
+            model.new_interval_variable_array("Start", 0, horizon - 1, num_tasks_usize);
 
         for resource in 0..num_resources_usize {
             let resource_capacity = resource_capacities
