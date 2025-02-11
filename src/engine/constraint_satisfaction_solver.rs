@@ -3,15 +3,24 @@
 
 use std::cmp::min;
 use std::fmt::Debug;
+use std::fmt::Display;
 use std::fmt::Formatter;
 use std::time::Instant;
 
+use clap::ValueEnum;
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
 
+use super::conflict_analysis::AllDecisionLearning;
 use super::conflict_analysis::ConflictResolver;
+use super::conflict_analysis::LearnedClause;
 use super::conflict_analysis::NoLearning;
-use super::conflict_analysis::ResolutionConflictAnalyser;
+use super::conflict_analysis::UniqueImplicationPoint;
+use super::cp::propagation::PropagationContext;
+use super::minimisation::recompute_invariants;
+use super::minimisation::MinimisationContext;
+use super::minimisation::RecursiveMinimiser;
+use super::minimisation::SemanticMinimiser;
 use super::sat::ClauseAllocator;
 use super::termination::TerminationCondition;
 use super::variables::IntegerVariable;
@@ -43,7 +52,9 @@ use crate::engine::cp::VariableLiteralMappings;
 use crate::engine::cp::WatchListCP;
 use crate::engine::cp::WatchListPropositional;
 use crate::engine::debug_helper::DebugDyn;
+use crate::engine::minimisation::Minimiser;
 use crate::engine::predicates::predicate::Predicate;
+use crate::engine::sat::calculate_lbd;
 use crate::engine::sat::AssignmentsPropositional;
 use crate::engine::sat::ClausalPropagator;
 use crate::engine::sat::ExplanationClauseManager;
@@ -154,6 +165,9 @@ pub struct ConstraintSatisfactionSolver {
     internal_parameters: SatisfactionSolverOptions,
     /// The names of the variables in the solver.
     variable_names: VariableNames,
+
+    semantic_minimiser: SemanticMinimiser,
+    recursive_minimiser: RecursiveMinimiser,
 }
 
 impl Debug for ConstraintSatisfactionSolver {
@@ -191,18 +205,65 @@ pub struct SatisfactionSolverOptions {
 
     /// The strategy to use when the solver reaches a conflicting state.
     pub conflict_resolver: ConflictResolutionStrategy,
+
+    pub minimisation_strategy: ClauseMinimisationStrategy,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// The strategy used for minimisation
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum ClauseMinimisationStrategy {
+    #[default]
+    NoMinimisation,
+    /// Apply only recursive minimisation
+    Recursive,
+    /// Apply only semantic minimisation
+    Semantic,
+    /// First apply recursive minimisation and then apply semantic minimisation
+    RecursiveSemantic,
+    /// First apply semantic minimisation and then apply recursive minimisation
+    SemanticRecursive,
+}
+
+impl Display for ClauseMinimisationStrategy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClauseMinimisationStrategy::NoMinimisation => write!(f, "no-minimisation"),
+            ClauseMinimisationStrategy::Recursive => write!(f, "recursive"),
+            ClauseMinimisationStrategy::Semantic => write!(f, "semantic"),
+            ClauseMinimisationStrategy::RecursiveSemantic => write!(f, "recursive-semantic"),
+            ClauseMinimisationStrategy::SemanticRecursive => write!(f, "semantic-recursive"),
+        }
+    }
+}
+
+/// The strategy used for conflict resolution.
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ConflictResolutionStrategy {
-    Learning,
+    UniqueImplicationPoint,
+    AllDecision,
+    #[default]
     NoLearning,
+}
+
+impl Display for ConflictResolutionStrategy {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConflictResolutionStrategy::UniqueImplicationPoint => {
+                write!(f, "unique-implication-point")
+            }
+            ConflictResolutionStrategy::AllDecision => write!(f, "all-decision"),
+            ConflictResolutionStrategy::NoLearning => write!(f, "no-learning"),
+        }
+    }
 }
 
 impl ConflictResolutionStrategy {
     fn make(self) -> Box<dyn ConflictResolver> {
         match self {
-            ConflictResolutionStrategy::Learning => Box::new(ResolutionConflictAnalyser::default()),
+            ConflictResolutionStrategy::UniqueImplicationPoint => {
+                Box::new(UniqueImplicationPoint::default())
+            }
+            ConflictResolutionStrategy::AllDecision => Box::new(AllDecisionLearning::default()),
             ConflictResolutionStrategy::NoLearning => Box::new(NoLearning),
         }
     }
@@ -212,7 +273,8 @@ impl Default for SatisfactionSolverOptions {
     fn default() -> Self {
         SatisfactionSolverOptions {
             random_generator: SmallRng::seed_from_u64(42),
-            conflict_resolver: ConflictResolutionStrategy::NoLearning,
+            conflict_resolver: ConflictResolutionStrategy::default(),
+            minimisation_strategy: ClauseMinimisationStrategy::default(),
         }
     }
 }
@@ -325,6 +387,8 @@ impl ConstraintSatisfactionSolver {
             counters: Counters::default(),
             internal_parameters: solver_options,
             variable_names: VariableNames::default(),
+            semantic_minimiser: Default::default(),
+            recursive_minimiser: Default::default(),
         };
 
         // we introduce a dummy variable set to true at the root level
@@ -793,6 +857,60 @@ impl ConstraintSatisfactionSolver {
         self.reason_store.increase_decision_level();
     }
 
+    fn minimise_learned_clause(&mut self, learned_clause: &mut LearnedClause) {
+        let num_literals_before = learned_clause.literals.len();
+        let context = MinimisationContext::new(
+            &self.assignments_integer,
+            &self.assignments_propositional,
+            &self.variable_literal_mappings,
+        );
+        match self.internal_parameters.minimisation_strategy {
+            ClauseMinimisationStrategy::NoMinimisation => {}
+            ClauseMinimisationStrategy::Recursive => {
+                self.recursive_minimiser.minimise(&context, learned_clause);
+                self.counters
+                    .average_number_of_literals_removed_recursive
+                    .add_term((num_literals_before - learned_clause.literals.len()) as u64);
+            }
+            ClauseMinimisationStrategy::Semantic => {
+                self.semantic_minimiser.minimise(&context, learned_clause);
+                self.counters
+                    .average_number_of_literals_removed_semantic
+                    .add_term((num_literals_before - learned_clause.literals.len()) as u64);
+            }
+            ClauseMinimisationStrategy::RecursiveSemantic => {
+                self.recursive_minimiser.minimise(&context, learned_clause);
+                self.counters
+                    .average_number_of_literals_removed_recursive
+                    .add_term((num_literals_before - learned_clause.literals.len()) as u64);
+                let new_before = learned_clause.literals.len();
+                self.semantic_minimiser.minimise(&context, learned_clause);
+                self.counters
+                    .average_number_of_literals_removed_semantic
+                    .add_term((new_before - learned_clause.literals.len()) as u64);
+            }
+            ClauseMinimisationStrategy::SemanticRecursive => {
+                self.semantic_minimiser.minimise(&context, learned_clause);
+                self.counters
+                    .average_number_of_literals_removed_semantic
+                    .add_term((num_literals_before - learned_clause.literals.len()) as u64);
+                let new_before = learned_clause.literals.len();
+                self.recursive_minimiser.minimise(&context, learned_clause);
+                self.counters
+                    .average_number_of_literals_removed_recursive
+                    .add_term((new_before - learned_clause.literals.len()) as u64);
+            }
+        }
+        self.counters
+            .average_number_of_literals_removed_minimisation
+            .add_term((num_literals_before - learned_clause.literals.len()) as u64);
+
+        recompute_invariants(
+            &PropagationContext::new(&self.assignments_integer, &self.assignments_propositional),
+            learned_clause,
+        )
+    }
+
     /// Changes the state based on the conflict analysis result (stored in
     /// [`ConstraintSatisfactionSolver::analysis_result`]). It performs the following:
     /// - Adds the learned clause to the database
@@ -806,9 +924,29 @@ impl ConstraintSatisfactionSolver {
     fn resolve_conflict(&mut self, brancher: &mut impl Brancher) {
         munchkin_assert_moderate!(self.state.conflicting());
 
-        self.compute_learned_clause(brancher);
+        let mut learned_clause = self.compute_learned_clause(brancher);
+        // We calculate some statistics and perform clause minimisation (before collecting the
+        // statistics)
+        if let Some(learned_clause) = learned_clause.as_mut() {
+            self.minimise_learned_clause(learned_clause);
 
-        let result = self.process_learned_clause(brancher);
+            self.counters
+                .average_learned_clause_lbd
+                .add_term(
+                    calculate_lbd(&learned_clause.literals, &self.assignments_propositional) as u64,
+                );
+            self.counters
+                .average_backtrack_amount
+                .add_term((self.get_decision_level() - learned_clause.backjump_level) as u64);
+            self.counters
+                .average_learned_clause_length
+                .add_term(learned_clause.literals.len() as u64);
+            if learned_clause.literals.len() == 1 {
+                self.counters.num_unit_clauses_learned += 1;
+            }
+        }
+
+        let result = self.process_learned_clause(learned_clause, brancher);
 
         if result.is_err() {
             self.state.declare_infeasible();
@@ -817,7 +955,7 @@ impl ConstraintSatisfactionSolver {
         }
     }
 
-    fn compute_learned_clause(&mut self, brancher: &mut impl Brancher) {
+    fn compute_learned_clause(&mut self, brancher: &mut impl Brancher) -> Option<LearnedClause> {
         let mut conflict_analysis_context = ConflictAnalysisContext {
             assumptions: &self.assumptions,
             clausal_propagator: &mut self.clausal_propagator,
@@ -841,7 +979,11 @@ impl ConstraintSatisfactionSolver {
             .resolve_conflict(&mut conflict_analysis_context)
     }
 
-    fn process_learned_clause(&mut self, brancher: &mut impl Brancher) -> Result<(), ()> {
+    fn process_learned_clause(
+        &mut self,
+        learned_clause: Option<LearnedClause>,
+        brancher: &mut impl Brancher,
+    ) -> Result<(), ()> {
         let mut conflict_analysis_context = ConflictAnalysisContext {
             assumptions: &self.assumptions,
             clausal_propagator: &mut self.clausal_propagator,
@@ -863,7 +1005,7 @@ impl ConstraintSatisfactionSolver {
         };
 
         self.conflict_resolver
-            .process(&mut conflict_analysis_context)
+            .process(learned_clause, &mut conflict_analysis_context)
     }
 
     pub(crate) fn backtrack(&mut self, backtrack_level: usize, brancher: &mut impl Brancher) {
@@ -1218,33 +1360,44 @@ impl CumulativeMovingAverage {
 pub(crate) struct Counters {
     pub(crate) num_decisions: u64,
     pub(crate) num_conflicts: u64,
-    pub(crate) average_conflict_size: CumulativeMovingAverage,
     num_propagations: u64,
+    time_spent_in_solver: u64,
+
+    pub(crate) average_conflict_size: CumulativeMovingAverage,
     num_unit_clauses_learned: u64,
     average_learned_clause_length: CumulativeMovingAverage,
-    time_spent_in_solver: u64,
     average_backtrack_amount: CumulativeMovingAverage,
+    average_learned_clause_lbd: CumulativeMovingAverage,
+
+    average_number_of_literals_removed_semantic: CumulativeMovingAverage,
+    average_number_of_literals_removed_recursive: CumulativeMovingAverage,
+    average_number_of_literals_removed_minimisation: CumulativeMovingAverage,
 }
 
 impl Counters {
     fn log_statistics(&self) {
         log_statistic("numberOfDecisions", self.num_decisions);
         log_statistic("numberOfConflicts", self.num_conflicts);
+        log_statistic("numberOfPropagations", self.num_propagations);
+        log_statistic("timeSpentInSolverInMilliseconds", self.time_spent_in_solver);
+
         log_statistic(
             "averageSizeOfConflictExplanation",
             self.average_conflict_size.value(),
         );
-        log_statistic("numberOfPropagations", self.num_propagations);
         log_statistic("numberOfLearnedUnitClauses", self.num_unit_clauses_learned);
         log_statistic(
             "averageLearnedClauseLength",
             self.average_learned_clause_length.value(),
         );
-        log_statistic("timeSpentInSolverInMilliseconds", self.time_spent_in_solver);
         log_statistic(
             "averageBacktrackAmount",
             self.average_backtrack_amount.value(),
         );
+        log_statistic(
+            "averageLearnedClauseLbd",
+            self.average_learned_clause_lbd.value(),
+        )
     }
 }
 

@@ -1,5 +1,6 @@
 use std::cmp::min;
 
+use super::LearnedClause;
 use crate::basic_types::ClauseReference;
 use crate::basic_types::ConstraintReference;
 use crate::basic_types::StoredConflictInfo;
@@ -49,12 +50,14 @@ pub(crate) struct ConflictAnalysisContext<'a> {
 }
 
 impl ConflictAnalysisContext<'_> {
+    /// Enqueue a decision literal as if it was a decision
     #[allow(unused, reason = "will be used in an assignment")]
     pub(crate) fn enqueue_decision_literal(&mut self, decision_literal: Literal) {
         self.assignments_propositional
             .enqueue_decision_literal(decision_literal)
     }
 
+    /// Enqueue a literal as if it was a propagation with an empty reason
     pub(crate) fn enqueue_propagated_literal(&mut self, propagated_literal: Literal) {
         let result = self
             .assignments_propositional
@@ -65,6 +68,20 @@ impl ConflictAnalysisContext<'_> {
         );
     }
 
+    /// Adds the learned clause to the clausal propagator
+    ///
+    /// Note that this method will not accept learned clauses with less than 1 literal
+    #[allow(unused, reason = "will be used in an assignment")]
+    pub(crate) fn add_learned_clause(&mut self, learned_clause: LearnedClause) {
+        munchkin_assert_simple!(learned_clause.literals.len() > 1, "The learned clause should have at least 2 literals for it to be added to the clausal propagator");
+        let _ = self.clausal_propagator.add_asserting_learned_clause(
+            learned_clause.literals,
+            self.assignments_propositional,
+            self.clause_allocator,
+        );
+    }
+
+    /// Backtrack to the provided decision level
     pub(crate) fn backtrack(&mut self, backtrack_level: usize) {
         munchkin_assert_simple!(backtrack_level < self.get_decision_level());
 
@@ -108,12 +125,14 @@ impl ConflictAnalysisContext<'_> {
         *self.sat_trail_synced_position = self.assignments_propositional.num_trail_entries();
     }
 
+    /// Returns the last decision which was made
     pub(crate) fn get_last_decision(&self) -> Literal {
         self.assignments_propositional
             .get_last_decision()
             .expect("Expected to be able to get the last decision")
     }
 
+    // Returns the current decision level
     pub(crate) fn get_decision_level(&self) -> usize {
         munchkin_assert_moderate!(
             self.assignments_propositional.get_decision_level()

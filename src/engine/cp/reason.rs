@@ -5,7 +5,7 @@ use super::propagation::PropagatorId;
 use crate::basic_types::PropositionalConjunction;
 use crate::basic_types::Trail;
 #[cfg(doc)]
-use crate::engine::conflict_analysis::ConflictAnalysisContext;
+use crate::engine::conflict_analysis::PropagationContext;
 use crate::engine::cp::propagation::PropagationContext;
 use crate::engine::debug_helper::DebugDyn;
 use crate::munchkin_assert_simple;

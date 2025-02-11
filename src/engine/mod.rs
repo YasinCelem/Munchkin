@@ -1,6 +1,7 @@
 pub(crate) mod conflict_analysis;
 pub(crate) mod constraint_satisfaction_solver;
 pub(crate) mod cp;
+pub(crate) mod minimisation;
 pub(crate) mod predicates;
 pub(crate) mod sat;
 pub(crate) mod termination;

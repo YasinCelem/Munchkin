@@ -5,6 +5,8 @@ use std::time::Duration;
 use clap::ValueEnum;
 
 use crate::branching::Brancher;
+use crate::engine::constraint_satisfaction_solver::ClauseMinimisationStrategy;
+use crate::engine::constraint_satisfaction_solver::ConflictResolutionStrategy;
 use crate::model::Globals;
 use crate::model::IntVariable;
 use crate::model::Model;
@@ -49,6 +51,13 @@ pub enum Action<SearchStrategies: OptionEnum> {
         /// The search strategy to use.
         #[arg(short = 'S', long = "search", value_enum, default_value_t)]
         search_strategy: SearchStrategies,
+
+        #[arg(short = 'M', long = "minimisation", default_value_t)]
+        minimisation: ClauseMinimisationStrategy,
+
+        /// The conflict resolution strategy to use
+        #[arg(short = 'C', long = "resolution", default_value_t)]
+        conflict_resolution: ConflictResolutionStrategy,
 
         /// The number of seconds the solver is allowed to run.
         time_out: u64,
@@ -114,12 +123,16 @@ where
             globals,
             proof_path,
             search_strategy,
+            conflict_resolution,
+            minimisation,
             time_out,
         } => solve(
             model,
             instance,
             search_strategy,
             globals,
+            conflict_resolution,
+            minimisation,
             proof_path,
             Duration::from_secs(time_out),
         ),
@@ -127,16 +140,21 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments, reason = "All arguments need to be passed")]
 pub fn solve<SearchStrategies>(
     model: Model,
     instance: impl Problem<SearchStrategies>,
     search_strategy: SearchStrategies,
     globals: Vec<Globals>,
+    conflict_resolution: ConflictResolutionStrategy,
+    minimisation: ClauseMinimisationStrategy,
     _proof_path: Option<PathBuf>,
     time_out: Duration,
 ) -> anyhow::Result<()> {
     let (mut solver, solver_variables) = model.into_solver(
         SolverOptions {
+            conflict_resolver: conflict_resolution,
+            minimisation_strategy: minimisation,
             ..Default::default()
         },
         |global| globals.contains(&global),

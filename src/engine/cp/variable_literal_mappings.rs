@@ -495,6 +495,14 @@ impl VariableLiteralMappings {
             assignments_integer,
         )
     }
+
+    #[allow(unused, reason = "will be used in the assignments")]
+    pub(crate) fn get_predicates_for_literal(
+        &self,
+        literal: Literal,
+    ) -> impl Iterator<Item = IntegerPredicate> + '_ {
+        self.literal_to_predicates[literal].iter().copied()
+    }
 }
 
 #[cfg(test)]
