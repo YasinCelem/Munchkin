@@ -4,7 +4,9 @@
 use std::fmt::Debug;
 use std::fmt::Formatter;
 
+use super::cp::reason::Reason;
 use super::cp::WatchListPropositional;
+use crate::basic_types::ConstraintReference;
 use crate::basic_types::Inconsistency;
 use crate::basic_types::PropagationStatusCP;
 use crate::basic_types::PropositionalConjunction;
@@ -27,10 +29,10 @@ use crate::engine::variables::PropositionalVariable;
 /// A container for CP variables, which can be used to test propagators.
 #[derive(Default, Debug)]
 pub(crate) struct TestSolver {
-    assignments_integer: AssignmentsInteger,
-    reason_store: ReasonStore,
-    assignments_propositional: AssignmentsPropositional,
-    watch_list: WatchListCP,
+    pub(crate) assignments_integer: AssignmentsInteger,
+    pub(crate) reason_store: ReasonStore,
+    pub(crate) assignments_propositional: AssignmentsPropositional,
+    pub(crate) watch_list: WatchListCP,
     watch_list_propositional: WatchListPropositional,
     next_id: u32,
 }
@@ -45,6 +47,33 @@ impl Debug for BoxedPropagator {
 
 #[allow(unused, reason = "can be used in an assignment")]
 impl TestSolver {
+    pub(crate) fn set_decision(&mut self, literal: Literal) {
+        self.assignments_propositional
+            .enqueue_decision_literal(literal)
+    }
+
+    pub(crate) fn propagate_with_reason(
+        &mut self,
+        literal: Literal,
+        reason: impl Into<Reason>,
+    ) -> PropagationStatusCP {
+        let reason_ref = self.reason_store.push(PropagatorId(0), reason.into());
+        let enqueue_result = self.assignments_propositional.enqueue_propagated_literal(
+            literal,
+            ConstraintReference::create_reason_reference(reason_ref),
+        );
+        if let Some(conflict_info) = enqueue_result {
+            return Err(Inconsistency::Other(conflict_info));
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn increase_decision_level(&mut self) {
+        self.assignments_integer.increase_decision_level();
+        self.assignments_propositional.increase_decision_level();
+    }
+
     pub(crate) fn new_variable(&mut self, lb: i32, ub: i32) -> DomainId {
         self.watch_list.grow();
         self.assignments_integer.grow(lb, ub)

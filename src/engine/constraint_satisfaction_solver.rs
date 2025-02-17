@@ -1510,7 +1510,7 @@ impl CSPSolverState {
         self.internal_state = CSPSolverStateInternal::Infeasible;
     }
 
-    fn declare_conflict(&mut self, conflict_info: StoredConflictInfo) {
+    pub(crate) fn declare_conflict(&mut self, conflict_info: StoredConflictInfo) {
         munchkin_assert_simple!(!self.conflicting());
         self.internal_state = CSPSolverStateInternal::Conflict { conflict_info };
     }
