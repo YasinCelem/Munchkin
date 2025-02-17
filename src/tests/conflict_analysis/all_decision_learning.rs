@@ -5,9 +5,9 @@ use rand::SeedableRng;
 
 use crate::branching::Brancher;
 use crate::branching::SelectionContext;
+use crate::engine::conflict_analysis::AllDecisionLearning;
 use crate::engine::conflict_analysis::ConflictAnalysisContext;
 use crate::engine::conflict_analysis::ConflictResolver;
-use crate::engine::conflict_analysis::UniqueImplicationPoint;
 use crate::engine::constraint_satisfaction_solver::CSPSolverState;
 use crate::engine::constraint_satisfaction_solver::ClauseMinimisationStrategy;
 use crate::engine::constraint_satisfaction_solver::ConflictResolutionStrategy;
@@ -27,7 +27,7 @@ impl Brancher for DummyBrancher {
 
 /// Based on Example 4.2.4 from https://www3.cs.stonybrook.edu/~cram/cse505/Fall20/Resources/cdcl.pdf
 #[test]
-fn test_1uip() {
+fn test_all_decision() {
     let mut solver = TestSolver::default();
 
     let x31 = solver.new_literal();
@@ -63,7 +63,7 @@ fn test_1uip() {
         panic!("Should have been an error");
     }
 
-    let mut resolver = UniqueImplicationPoint::default();
+    let mut resolver = AllDecisionLearning::default();
     let learned_clause = resolver
         .resolve_conflict(&mut ConflictAnalysisContext {
             clausal_propagator: &mut solver.clausal_propagator,
@@ -72,7 +72,7 @@ fn test_1uip() {
             assignments_propositional: &mut solver.assignments_propositional,
             internal_parameters: &SolverOptions {
                 random_generator: SmallRng::seed_from_u64(42),
-                conflict_resolver: ConflictResolutionStrategy::UniqueImplicationPoint,
+                conflict_resolver: ConflictResolutionStrategy::AllDecision,
                 minimisation_strategy: ClauseMinimisationStrategy::default(),
             },
             assumptions: &vec![],
@@ -90,7 +90,6 @@ fn test_1uip() {
         })
         .expect("Expected learned clause to be returned");
 
-    assert_eq!(learned_clause.literals.len(), 2);
-    assert_eq!(learned_clause.literals, vec![!x4, x21]);
-    assert_eq!(learned_clause.backjump_level, 1);
+    assert_eq!(learned_clause.literals, vec![x1, x31, x21]);
+    assert_eq!(learned_clause.backjump_level, 2);
 }
