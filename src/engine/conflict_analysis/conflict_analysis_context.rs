@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::ops::Deref;
 
 use super::LearnedClause;
 use crate::basic_types::ClauseReference;
@@ -141,6 +142,28 @@ impl ConflictAnalysisContext<'_> {
         self.assignments_propositional.get_decision_level()
     }
 
+    /// Returns the literal which was set at trail entry `index`
+    #[allow(unused, reason = "will be used in an assignment")]
+    pub(crate) fn get_trail_entry(&self, index: usize) -> Literal {
+        self.assignments_propositional.get_trail_entry(index)
+    }
+
+    /// Returns whether the provided [`Literal`] was assigned at the root level
+    #[allow(unused, reason = "will be used in an assignment")]
+    pub(crate) fn is_root_level_assignment(&self, literal: Literal) -> bool {
+        self.assignments_propositional
+            .is_literal_root_assignment(literal)
+    }
+
+    /// Returns the [`Literal`]s of the clause pointed to by the provided `clause_reference`
+    #[allow(unused, reason = "will be used in an assignment")]
+    pub(crate) fn get_literals_for_clause_reference(
+        &self,
+        clause_reference: ClauseReference,
+    ) -> &[Literal] {
+        self.clause_allocator[clause_reference].get_literal_slice()
+    }
+
     /// Given a propagated literal, returns a clause reference of the clause that propagates the
     /// literal. In case the literal was propagated by a clause, the propagating clause is
     /// returned. Otherwise, the literal was propagated by a propagator, in which case a new
@@ -148,6 +171,8 @@ impl ConflictAnalysisContext<'_> {
     ///
     /// Note that information about the reason for propagation of root literals is not properly
     /// kept, so asking about the reason for a root propagation will cause a panic.
+    ///
+    /// *Note* - The `0th` [`Literal`] in the clause represents the literal that was propagated.
     #[allow(unused, reason = "will be used in an assignment")]
     pub(crate) fn get_propagation_clause_reference(
         &mut self,
@@ -273,5 +298,14 @@ impl ConflictAnalysisContext<'_> {
 
         self.explanation_clause_manager
             .add_explanation_clause_unchecked(explanation_literals, self.clause_allocator)
+    }
+}
+
+impl Drop for ConflictAnalysisContext<'_> {
+    fn drop(&mut self) {
+        // We perform the clean up of explanation clauses whenever the conflict analysis context is
+        // dropped
+        self.explanation_clause_manager
+            .clean_up_explanation_clauses(self.clause_allocator);
     }
 }
