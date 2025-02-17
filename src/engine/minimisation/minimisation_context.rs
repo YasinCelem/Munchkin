@@ -5,6 +5,7 @@ use crate::engine::sat::AssignmentsPropositional;
 use crate::predicates::IntegerPredicate;
 use crate::variables::Literal;
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct MinimisationContext<'a> {
     assignments_integer: &'a AssignmentsInteger,
     assignments_propositional: &'a AssignmentsPropositional,

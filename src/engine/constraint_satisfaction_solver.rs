@@ -867,35 +867,35 @@ impl ConstraintSatisfactionSolver {
         match self.internal_parameters.minimisation_strategy {
             ClauseMinimisationStrategy::NoMinimisation => {}
             ClauseMinimisationStrategy::Recursive => {
-                self.recursive_minimiser.minimise(&context, learned_clause);
+                self.recursive_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_recursive
                     .add_term((num_literals_before - learned_clause.literals.len()) as u64);
             }
             ClauseMinimisationStrategy::Semantic => {
-                self.semantic_minimiser.minimise(&context, learned_clause);
+                self.semantic_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_semantic
                     .add_term((num_literals_before - learned_clause.literals.len()) as u64);
             }
             ClauseMinimisationStrategy::RecursiveSemantic => {
-                self.recursive_minimiser.minimise(&context, learned_clause);
+                self.recursive_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_recursive
                     .add_term((num_literals_before - learned_clause.literals.len()) as u64);
                 let new_before = learned_clause.literals.len();
-                self.semantic_minimiser.minimise(&context, learned_clause);
+                self.semantic_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_semantic
                     .add_term((new_before - learned_clause.literals.len()) as u64);
             }
             ClauseMinimisationStrategy::SemanticRecursive => {
-                self.semantic_minimiser.minimise(&context, learned_clause);
+                self.semantic_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_semantic
                     .add_term((num_literals_before - learned_clause.literals.len()) as u64);
                 let new_before = learned_clause.literals.len();
-                self.recursive_minimiser.minimise(&context, learned_clause);
+                self.recursive_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_recursive
                     .add_term((new_before - learned_clause.literals.len()) as u64);
@@ -906,7 +906,7 @@ impl ConstraintSatisfactionSolver {
             .add_term((num_literals_before - learned_clause.literals.len()) as u64);
 
         recompute_invariants(
-            &PropagationContext::new(&self.assignments_integer, &self.assignments_propositional),
+            PropagationContext::new(&self.assignments_integer, &self.assignments_propositional),
             learned_clause,
         )
     }

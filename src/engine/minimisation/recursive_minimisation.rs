@@ -13,7 +13,7 @@ impl Default for RecursiveMinimiser {
 }
 
 impl Minimiser for RecursiveMinimiser {
-    fn minimise(&mut self, _context: &MinimisationContext, _learned_clause: &mut LearnedClause) {
+    fn minimise(&mut self, _context: MinimisationContext, _learned_clause: &mut LearnedClause) {
         todo!()
     }
 }

@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::ops::Deref;
 
 use super::LearnedClause;
 use crate::basic_types::ClauseReference;
