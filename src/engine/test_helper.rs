@@ -5,7 +5,11 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 
 use super::cp::reason::Reason;
+use super::cp::VariableLiteralMappings;
 use super::cp::WatchListPropositional;
+use super::sat::ClausalPropagator;
+use super::sat::ClauseAllocator;
+use crate::basic_types::ConflictInfo;
 use crate::basic_types::ConstraintReference;
 use crate::basic_types::Inconsistency;
 use crate::basic_types::PropagationStatusCP;
@@ -24,7 +28,7 @@ use crate::engine::sat::AssignmentsPropositional;
 use crate::engine::variables::DomainId;
 use crate::engine::variables::IntegerVariable;
 use crate::engine::variables::Literal;
-use crate::engine::variables::PropositionalVariable;
+use crate::ConstraintOperationError;
 
 /// A container for CP variables, which can be used to test propagators.
 #[derive(Default, Debug)]
@@ -33,7 +37,10 @@ pub(crate) struct TestSolver {
     pub(crate) reason_store: ReasonStore,
     pub(crate) assignments_propositional: AssignmentsPropositional,
     pub(crate) watch_list: WatchListCP,
-    watch_list_propositional: WatchListPropositional,
+    pub(crate) watch_list_propositional: WatchListPropositional,
+    pub(crate) variable_literal_mappings: VariableLiteralMappings,
+    pub(crate) clausal_propagator: ClausalPropagator,
+    pub(crate) clause_allocator: ClauseAllocator,
     next_id: u32,
 }
 
@@ -69,6 +76,24 @@ impl TestSolver {
         Ok(())
     }
 
+    pub(crate) fn propagate_clausal_propagator(&mut self) -> Result<(), ConflictInfo> {
+        self.clausal_propagator.propagate(
+            &mut self.assignments_propositional,
+            &mut self.clause_allocator,
+        )
+    }
+
+    pub(crate) fn add_clause(
+        &mut self,
+        literals: Vec<Literal>,
+    ) -> Result<(), ConstraintOperationError> {
+        self.clausal_propagator.add_permanent_clause(
+            literals,
+            &mut self.assignments_propositional,
+            &mut self.clause_allocator,
+        )
+    }
+
     pub(crate) fn increase_decision_level(&mut self) {
         self.assignments_integer.increase_decision_level();
         self.assignments_propositional.increase_decision_level();
@@ -98,11 +123,15 @@ impl TestSolver {
     }
 
     pub(crate) fn new_literal(&mut self) -> Literal {
-        let new_variable_index = self.assignments_propositional.num_propositional_variables();
-        self.watch_list_propositional.grow();
-        self.assignments_propositional.grow();
+        let variable = self
+            .variable_literal_mappings
+            .create_new_propositional_variable(
+                &mut self.watch_list_propositional,
+                &mut self.clausal_propagator,
+                &mut self.assignments_propositional,
+            );
 
-        Literal::new(PropositionalVariable::new(new_variable_index), true)
+        Literal::new(variable, true)
     }
 
     pub(crate) fn new_propagator(

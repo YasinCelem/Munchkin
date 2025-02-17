@@ -28,7 +28,7 @@ pub(crate) trait ConflictResolver {
 ///
 /// A [`LearnedClause`] can be created using either [`LearnedClause::new`] or, in the case of a
 /// unit learned clause, using [`LearnedClause::unit_learned_clause`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct LearnedClause {
     pub(crate) literals: Vec<Literal>,
     pub(crate) backjump_level: usize,

@@ -13,9 +13,6 @@ use crate::engine::constraint_satisfaction_solver::ClauseMinimisationStrategy;
 use crate::engine::constraint_satisfaction_solver::ConflictResolutionStrategy;
 use crate::engine::constraint_satisfaction_solver::Counters;
 use crate::engine::cp::PropagatorQueue;
-use crate::engine::cp::VariableLiteralMappings;
-use crate::engine::sat::ClausalPropagator;
-use crate::engine::sat::ClauseAllocator;
 use crate::engine::sat::ExplanationClauseManager;
 use crate::engine::test_helper::TestSolver;
 use crate::options::SolverOptions;
@@ -31,8 +28,6 @@ impl Brancher for DummyBrancher {
 #[test]
 fn test_1uip() {
     let mut solver = TestSolver::default();
-    let mut clausal_propagator = ClausalPropagator::default();
-    let mut clause_allocator = ClauseAllocator::default();
 
     let x31 = solver.new_literal();
     let x1 = solver.new_literal();
@@ -43,36 +38,12 @@ fn test_1uip() {
     let x6 = solver.new_literal();
     let x21 = solver.new_literal();
 
-    let _ = clausal_propagator.add_permanent_clause(
-        vec![x1, x31, !x2],
-        &mut solver.assignments_propositional,
-        &mut clause_allocator,
-    );
-    let _ = clausal_propagator.add_permanent_clause(
-        vec![x1, !x3],
-        &mut solver.assignments_propositional,
-        &mut clause_allocator,
-    );
-    let _ = clausal_propagator.add_permanent_clause(
-        vec![x2, x3, x4],
-        &mut solver.assignments_propositional,
-        &mut clause_allocator,
-    );
-    let _ = clausal_propagator.add_permanent_clause(
-        vec![!x4, !x5],
-        &mut solver.assignments_propositional,
-        &mut clause_allocator,
-    );
-    let _ = clausal_propagator.add_permanent_clause(
-        vec![x21, !x4, !x6],
-        &mut solver.assignments_propositional,
-        &mut clause_allocator,
-    );
-    let _ = clausal_propagator.add_permanent_clause(
-        vec![x5, x6],
-        &mut solver.assignments_propositional,
-        &mut clause_allocator,
-    );
+    let _ = solver.add_clause(vec![x1, x31, !x2]);
+    let _ = solver.add_clause(vec![x1, !x3]);
+    let _ = solver.add_clause(vec![x2, x3, x4]);
+    let _ = solver.add_clause(vec![!x4, !x5]);
+    let _ = solver.add_clause(vec![x21, !x4, !x6]);
+    let _ = solver.add_clause(vec![x5, x6]);
 
     solver.increase_decision_level();
     solver.set_decision(!x21);
@@ -84,8 +55,7 @@ fn test_1uip() {
     solver.set_decision(!x1);
 
     let mut state = CSPSolverState::default();
-    let result =
-        clausal_propagator.propagate(&mut solver.assignments_propositional, &mut clause_allocator);
+    let result = solver.propagate_clausal_propagator();
     if let Err(conflict_info) = result {
         state.declare_conflict(conflict_info.try_into().unwrap());
     } else {
@@ -95,8 +65,8 @@ fn test_1uip() {
     let mut resolver = UniqueImplicationPoint::default();
     let learned_clause = resolver
         .resolve_conflict(&mut ConflictAnalysisContext {
-            clausal_propagator: &mut clausal_propagator,
-            variable_literal_mappings: &mut VariableLiteralMappings::default(),
+            clausal_propagator: &mut solver.clausal_propagator,
+            variable_literal_mappings: &solver.variable_literal_mappings,
             assignments_integer: &mut solver.assignments_integer,
             assignments_propositional: &mut solver.assignments_propositional,
             internal_parameters: &SolverOptions {
@@ -107,7 +77,7 @@ fn test_1uip() {
             assumptions: &vec![],
             solver_state: &mut state,
             brancher: &mut DummyBrancher,
-            clause_allocator: &mut clause_allocator,
+            clause_allocator: &mut solver.clause_allocator,
             explanation_clause_manager: &mut ExplanationClauseManager::default(),
             reason_store: &mut solver.reason_store,
             counters: &mut Counters::default(),
