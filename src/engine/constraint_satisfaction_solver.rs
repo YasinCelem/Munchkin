@@ -863,6 +863,10 @@ impl ConstraintSatisfactionSolver {
             &self.assignments_integer,
             &self.assignments_propositional,
             &self.variable_literal_mappings,
+            &mut self.explanation_clause_manager,
+            &mut self.reason_store,
+            &self.clausal_propagator,
+            &mut self.clause_allocator,
         );
         match self.internal_parameters.minimisation_strategy {
             ClauseMinimisationStrategy::NoMinimisation => {}
@@ -884,6 +888,15 @@ impl ConstraintSatisfactionSolver {
                     .average_number_of_literals_removed_recursive
                     .add_term((num_literals_before - learned_clause.literals.len()) as u64);
                 let new_before = learned_clause.literals.len();
+                let context = MinimisationContext::new(
+                    &self.assignments_integer,
+                    &self.assignments_propositional,
+                    &self.variable_literal_mappings,
+                    &mut self.explanation_clause_manager,
+                    &mut self.reason_store,
+                    &self.clausal_propagator,
+                    &mut self.clause_allocator,
+                );
                 self.semantic_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_semantic
@@ -895,6 +908,15 @@ impl ConstraintSatisfactionSolver {
                     .average_number_of_literals_removed_semantic
                     .add_term((num_literals_before - learned_clause.literals.len()) as u64);
                 let new_before = learned_clause.literals.len();
+                let context = MinimisationContext::new(
+                    &self.assignments_integer,
+                    &self.assignments_propositional,
+                    &self.variable_literal_mappings,
+                    &mut self.explanation_clause_manager,
+                    &mut self.reason_store,
+                    &self.clausal_propagator,
+                    &mut self.clause_allocator,
+                );
                 self.recursive_minimiser.minimise(context, learned_clause);
                 self.counters
                     .average_number_of_literals_removed_recursive

@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use crate::engine::conflict_analysis::LearnedClause;
+use crate::engine::cp::reason::ReasonStore;
 use crate::engine::cp::AssignmentsInteger;
 use crate::engine::cp::VariableLiteralMappings;
 use crate::engine::cp::WatchListCP;
@@ -11,6 +12,7 @@ use crate::engine::minimisation::SemanticMinimiser;
 use crate::engine::sat::AssignmentsPropositional;
 use crate::engine::sat::ClausalPropagator;
 use crate::engine::sat::ClauseAllocator;
+use crate::engine::sat::ExplanationClauseManager;
 use crate::predicate;
 use crate::predicates::Predicate;
 use crate::variables::Literal;
@@ -94,8 +96,8 @@ fn create_for_testing(
     (assignments_integer, assignments_propositional, mediator)
 }
 
-fn assert_elements_equal(first: Vec<Literal>, second: Vec<Literal>) {
-    assert_eq!(first.len(), second.len());
+pub(super) fn assert_elements_equal(first: Vec<Literal>, second: Vec<Literal>) {
+    assert_eq!(first.len(), second.len(),);
     assert!(first.iter().all(|literal| second.contains(literal)));
     assert!(second.iter().all(|literal| first.contains(literal)));
 }
@@ -141,10 +143,20 @@ fn simple_bound1() {
         &assignments_propositional,
     );
 
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
@@ -188,10 +200,20 @@ fn simple_bound2() {
         &assignments_propositional,
     );
 
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
@@ -239,10 +261,20 @@ fn simple_bound3() {
         &assignments_propositional,
     );
 
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
@@ -292,11 +324,20 @@ fn simple_assign() {
         &assignments_integer,
         &assignments_propositional,
     );
-
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
@@ -331,11 +372,20 @@ fn simple_lb_override1() {
         &assignments_integer,
         &assignments_propositional,
     );
-
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
@@ -370,10 +420,20 @@ fn hole_lb_override() {
         &assignments_propositional,
     );
 
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
@@ -410,10 +470,20 @@ fn hole_push_lb() {
         &assignments_propositional,
     );
 
+    let (mut explanation_manager, mut reason_store, clausal_propagator, mut clause_allocator) = (
+        ExplanationClauseManager::default(),
+        ReasonStore::default(),
+        ClausalPropagator::default(),
+        ClauseAllocator::default(),
+    );
     let context = MinimisationContext::new(
         &assignments_integer,
         &assignments_propositional,
         &variable_literal_mappings,
+        &mut explanation_manager,
+        &mut reason_store,
+        &clausal_propagator,
+        &mut clause_allocator,
     );
 
     p.minimise(context, &mut learned_clause);
