@@ -4,8 +4,16 @@ use std::fmt::Formatter;
 use log::debug;
 use log::warn;
 
+#[cfg(any(feature = "explanation-checks", test))]
+use super::cp::propagation::PropagationContext;
+#[cfg(any(feature = "explanation-checks", test))]
+use super::cp::reason::ReasonStore;
 use super::predicates::integer_predicate::IntegerPredicate;
 use super::sat::ClauseAllocator;
+#[cfg(any(feature = "explanation-checks", test))]
+use crate::basic_types::ConflictInfo;
+#[cfg(any(feature = "explanation-checks", test))]
+use crate::basic_types::Inconsistency;
 use crate::basic_types::PropositionalConjunction;
 use crate::engine::cp::propagation::PropagationContextMut;
 use crate::engine::cp::propagation::Propagator;
@@ -266,6 +274,184 @@ impl DebugHelper {
                 propagator.name(),
             );
         }
+    }
+
+    /// Checks whether the propagations of the propagator since `num_trail_entries_before` are
+    /// reproducible by performing 1 check:
+    /// 1. Setting the reason for a propagation should lead to the same propagation when debug
+    ///    propagating from scratch
+    ///
+    /// Note that this method does not check whether an empty explanation is correct!
+    #[cfg(any(feature = "explanation-checks", test))]
+    pub(crate) fn debug_check_propagations(
+        num_trail_entries_before: usize,
+        propagator_id: PropagatorId,
+        assignments: &AssignmentsInteger,
+        assignments_propositional: &AssignmentsPropositional,
+        variable_literal_mappings: &VariableLiteralMappings,
+        reason_store: &mut ReasonStore,
+        propagators_cp: &[Box<dyn Propagator>],
+    ) -> bool {
+        let mut result = true;
+        for trail_index in num_trail_entries_before..assignments.num_trail_entries() {
+            let trail_entry = assignments.get_trail_entry(trail_index);
+
+            let reason = reason_store
+                .get_or_compute(
+                    trail_entry
+                        .reason
+                        .expect("Expected checked propagation to have a reason"),
+                    &PropagationContext::new(assignments, assignments_propositional),
+                )
+                .expect("Expected reason to exist for integer trail entry");
+
+            if reason.is_empty() {
+                continue;
+            }
+
+            result &= Self::debug_propagator_reason(
+                trail_entry.predicate,
+                reason,
+                assignments,
+                assignments_propositional,
+                variable_literal_mappings,
+                propagators_cp[propagator_id.0 as usize].as_ref(),
+                propagator_id,
+            );
+        }
+        result
+    }
+
+    #[cfg(any(feature = "explanation-checks", test))]
+    fn debug_propagator_reason(
+        propagated_predicate: IntegerPredicate,
+        reason: &PropositionalConjunction,
+        assignments_integer: &AssignmentsInteger,
+        assignments_propositional: &AssignmentsPropositional,
+        variable_literal_mappings: &VariableLiteralMappings,
+        propagator: &dyn Propagator,
+        propagator_id: PropagatorId,
+    ) -> bool {
+        assert!(
+            reason.iter().all(|predicate| {
+                if let Ok(integer_predicate) = (*predicate).try_into() {
+                    assignments_integer.does_integer_predicate_hold(integer_predicate)
+                } else {
+                    true
+                }
+            }),
+            "Found propagation with predicates which do not hold - Propagator: {}",
+            propagator.name()
+        );
+        // Note that it could be the case that the reason contains the trivially false predicate in
+        // case of lifting!
+        //
+        // Also note that the reason could contain the integer variable whose domain is propagated
+        // itself
+
+        // Check #1
+        // Does setting the predicates from the reason indeed lead to the propagation?
+        {
+            let mut assignments_clone = assignments_integer.debug_create_empty_clone();
+            let mut assignments_propositional_clone =
+                assignments_propositional.debug_create_empty_clone();
+
+            let reason_predicates: Vec<Predicate> = reason.iter().copied().collect();
+            let adding_predicates_was_successful =
+                DebugHelper::debug_add_predicates_to_assignment_integers(
+                    &mut assignments_clone,
+                    &reason_predicates,
+                );
+            let adding_literals_was_successful =
+                DebugHelper::debug_add_predicates_to_assignment_propositional(
+                    &assignments_clone,
+                    &mut assignments_propositional_clone,
+                    variable_literal_mappings,
+                    &reason_predicates,
+                );
+            if adding_predicates_was_successful && adding_literals_was_successful {
+                // Now propagate using the debug propagation method.
+                let mut reason_store = Default::default();
+                let context = PropagationContextMut::new(
+                    &mut assignments_clone,
+                    &mut reason_store,
+                    &mut assignments_propositional_clone,
+                    propagator_id,
+                );
+                let debug_propagation_status_cp = propagator.propagate(context);
+
+                // Note that it could be the case that the propagation leads to conflict, in this
+                // case it should be the result of a propagation (i.e. an EmptyDomain)
+                if let Err(conflict) = debug_propagation_status_cp {
+                    // If we have found an error then it should either be derived by an empty
+                    // domain due to the same propagation holding
+                    //
+                    // or
+                    //
+                    // The conflict explanation should be a subset of the reason literals for the
+                    // propagation or all of the reason literals should be in the conflict
+                    // explanation
+
+                    assert!(
+                        {
+                            let is_empty_domain = matches!(conflict, Inconsistency::EmptyDomain);
+                            let has_propagated_predicate =
+                                assignments_clone.does_integer_predicate_hold(propagated_predicate);
+                            if is_empty_domain && has_propagated_predicate {
+                                // We check whether an empty domain was derived, if this is indeed
+                                // the case then we check whether the propagated predicate was
+                                // reproduced
+                                return true;
+                            }
+
+                            // If this is not the case then we check whether the explanation is a
+                            // subset of the premises
+                            if let Inconsistency::Other(ConflictInfo::Explanation(
+                                ref found_inconsistency,
+                            )) = conflict
+                            {
+                                found_inconsistency
+                                    .iter()
+                                    .all(|predicate| reason.contains(predicate))
+                                    || reason
+                                        .iter()
+                                        .all(|predicate| found_inconsistency.contains(predicate))
+                            } else {
+                                false
+                            }
+                        },
+                        "Debug propagation detected a conflict other than a propagation\n
+                         Propagator: '{}'\n
+                         Propagator id: {propagator_id}\n
+                         Reported reason: {reason:?}\n
+                         Reported propagation: {propagated_predicate}\n
+                         Reported Conflict: {conflict:?}",
+                        propagator.name()
+                    );
+                } else {
+                    // The predicate was either a propagation for the assignments_integer or
+                    // assignments_propositional
+                    assert!(
+                    assignments_clone.does_integer_predicate_hold(propagated_predicate),
+                    "Debug propagation could not obtain the propagated predicate given the provided reason.\n
+                     Propagator: '{}'\n
+                     Propagator id: {propagator_id}\n
+                     Reported reason: {reason:?}\n
+                     Reported propagation: {propagated_predicate}",
+                    propagator.name()
+                );
+                }
+            } else {
+                // Adding the predicates of the reason to the assignments led to failure
+                panic!(
+                    "Bug detected for '{}' propagator with id '{propagator_id}'
+                     after a reason was given by the propagator. This could indicate that the reason contained conflicting predicates.",
+                    propagator.name()
+                );
+            }
+        }
+
+        true
     }
 }
 

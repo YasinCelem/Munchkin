@@ -7,8 +7,9 @@ pub(crate) struct RecursiveMinimiser {
 }
 
 impl Default for RecursiveMinimiser {
+    #[allow(clippy::derivable_impls, reason = "Will be implemented")]
     fn default() -> Self {
-        todo!()
+        Self {}
     }
 }
 

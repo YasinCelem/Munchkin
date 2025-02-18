@@ -29,6 +29,15 @@ impl PropositionalConjunction {
     pub fn pop(&mut self) -> Option<Predicate> {
         self.predicates_in_conjunction.pop()
     }
+
+    pub fn contains(&self, predicate: &Predicate) -> bool {
+        self.predicates_in_conjunction.contains(predicate)
+    }
+
+    #[cfg(any(feature = "explanation-checks", test))]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.num_predicates() == 0
+    }
 }
 
 impl FromIterator<Predicate> for PropositionalConjunction {

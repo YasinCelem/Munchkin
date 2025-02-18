@@ -13,7 +13,7 @@ fn test_simple_propagation() {
 
     let rhs = solver.new_variable(5, 5);
 
-    let mut propagator = solver
+    let propagator = solver
         .new_propagator(ElementPropagator::new(index, [x, y].into(), rhs))
         .expect("Expected no conflict here");
 
@@ -21,7 +21,7 @@ fn test_simple_propagation() {
     // and the rhs is fixed at 5 so the index should be propagated to 0
     solver.assert_bounds(index, 0, 0);
 
-    let result = solver.propagate(&mut propagator);
+    let result = solver.propagate(propagator);
     assert!(result.is_ok());
 
     // And the value of x should be fixed to 5 now

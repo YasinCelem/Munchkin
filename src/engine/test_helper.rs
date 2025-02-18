@@ -4,13 +4,12 @@
 use std::fmt::Debug;
 use std::fmt::Formatter;
 
-use super::cp::reason::Reason;
 use super::cp::VariableLiteralMappings;
 use super::cp::WatchListPropositional;
 use super::sat::ClausalPropagator;
 use super::sat::ClauseAllocator;
+use super::DebugHelper;
 use crate::basic_types::ConflictInfo;
-use crate::basic_types::ConstraintReference;
 use crate::basic_types::Inconsistency;
 use crate::basic_types::PropagationStatusCP;
 use crate::basic_types::PropositionalConjunction;
@@ -42,6 +41,8 @@ pub(crate) struct TestSolver {
     pub(crate) clausal_propagator: ClausalPropagator,
     pub(crate) clause_allocator: ClauseAllocator,
     next_id: u32,
+
+    propagators: Vec<Box<dyn Propagator>>,
 }
 
 type BoxedPropagator = Box<dyn Propagator>;
@@ -57,23 +58,6 @@ impl TestSolver {
     pub(crate) fn set_decision(&mut self, literal: Literal) {
         self.assignments_propositional
             .enqueue_decision_literal(literal)
-    }
-
-    pub(crate) fn propagate_with_reason(
-        &mut self,
-        literal: Literal,
-        reason: impl Into<Reason>,
-    ) -> PropagationStatusCP {
-        let reason_ref = self.reason_store.push(PropagatorId(0), reason.into());
-        let enqueue_result = self.assignments_propositional.enqueue_propagated_literal(
-            literal,
-            ConstraintReference::create_reason_reference(reason_ref),
-        );
-        if let Some(conflict_info) = enqueue_result {
-            return Err(Inconsistency::Other(conflict_info));
-        }
-
-        Ok(())
     }
 
     pub(crate) fn propagate_clausal_propagator(&mut self) -> Result<(), ConflictInfo> {
@@ -137,7 +121,7 @@ impl TestSolver {
     pub(crate) fn new_propagator(
         &mut self,
         propagator: impl Propagator + 'static,
-    ) -> Result<BoxedPropagator, Inconsistency> {
+    ) -> Result<PropagatorId, Inconsistency> {
         let id = PropagatorId(self.next_id);
         self.next_id += 1;
 
@@ -151,9 +135,13 @@ impl TestSolver {
             &self.assignments_propositional,
         ))?;
 
-        self.propagate(&mut propagator)?;
+        let num_trail_entries_before = self.assignments_integer.num_trail_entries();
 
-        Ok(propagator)
+        self.propagators.push(propagator);
+
+        self.propagate(id)?;
+
+        Ok(id)
     }
 
     pub(crate) fn contains<Var: IntegerVariable>(&self, var: Var, value: i32) -> bool {
@@ -190,43 +178,29 @@ impl TestSolver {
             .remove_value_from_domain(var, value, None)
     }
 
-    pub(crate) fn propagate(&mut self, propagator: &mut BoxedPropagator) -> PropagationStatusCP {
+    pub(crate) fn propagate(&mut self, propagator: PropagatorId) -> PropagationStatusCP {
+        let num_trail_entries_before = self.assignments_integer.num_trail_entries();
         let context = PropagationContextMut::new(
             &mut self.assignments_integer,
             &mut self.reason_store,
             &mut self.assignments_propositional,
             PropagatorId(0),
         );
-        propagator.propagate(context)
-    }
+        let propagate = self.propagators[propagator].propagate(context);
 
-    pub(crate) fn propagate_until_fixed_point(
-        &mut self,
-        propagator: &mut BoxedPropagator,
-    ) -> PropagationStatusCP {
-        let mut num_trail_entries = self.assignments_integer.num_trail_entries()
-            + self.assignments_propositional.num_trail_entries();
-        loop {
-            {
-                // Specify the life-times to be able to retrieve the trail entries
-                let context = PropagationContextMut::new(
-                    &mut self.assignments_integer,
-                    &mut self.reason_store,
-                    &mut self.assignments_propositional,
-                    PropagatorId(0),
-                );
-                propagator.propagate(context)?;
-            }
-            if self.assignments_integer.num_trail_entries()
-                + self.assignments_propositional.num_trail_entries()
-                == num_trail_entries
-            {
-                break;
-            }
-            num_trail_entries = self.assignments_integer.num_trail_entries()
-                + self.assignments_propositional.num_trail_entries();
-        }
-        Ok(())
+        assert!(
+            DebugHelper::debug_check_propagations(
+                num_trail_entries_before,
+                propagator,
+                &self.assignments_integer,
+                &self.assignments_propositional,
+                &self.variable_literal_mappings,
+                &mut self.reason_store,
+                &self.propagators,
+            ),
+            "Inconsistency in explanation detected in test case"
+        );
+        propagate
     }
 
     pub(crate) fn get_reason_int(

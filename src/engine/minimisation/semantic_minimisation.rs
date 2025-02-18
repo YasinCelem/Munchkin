@@ -7,8 +7,9 @@ pub(crate) struct SemanticMinimiser {
 }
 
 impl Default for SemanticMinimiser {
+    #[allow(clippy::derivable_impls, reason = "Will be implemented")]
     fn default() -> Self {
-        todo!()
+        Self {}
     }
 }
 

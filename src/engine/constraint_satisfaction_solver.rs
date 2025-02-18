@@ -1068,7 +1068,7 @@ impl ConstraintSatisfactionSolver {
 
     /// Main propagation loop.
     pub(crate) fn propagate_enqueued(&mut self, termination: &mut impl TerminationCondition) {
-        let num_assigned_variables_old = self.assignments_integer.num_trail_entries();
+        let num_trail_entries_before = self.assignments_integer.num_trail_entries();
 
         loop {
             if termination.should_stop() {
@@ -1135,7 +1135,7 @@ impl ConstraintSatisfactionSolver {
         self.counters.num_conflicts += self.state.conflicting() as u64;
 
         self.counters.num_propagations +=
-            self.assignments_integer.num_trail_entries() as u64 - num_assigned_variables_old as u64;
+            self.assignments_integer.num_trail_entries() as u64 - num_trail_entries_before as u64;
 
         // Only check fixed point propagation if there was no reported conflict.
         munchkin_assert_extreme!(
@@ -1158,6 +1158,9 @@ impl ConstraintSatisfactionSolver {
         if self.propagator_queue.is_empty() {
             return PropagationStatusOneStepCP::FixedPoint;
         }
+
+        #[cfg(feature = "explanation-checks")]
+        let num_trail_entries_before = self.assignments_integer.num_trail_entries();
 
         let propagator_id = self.propagator_queue.pop();
         let propagator = &mut self.cp_propagators[propagator_id.0 as usize];
@@ -1192,6 +1195,19 @@ impl ConstraintSatisfactionSolver {
 
             Ok(()) => {
                 let _ = self.process_domain_events();
+                #[cfg(feature = "explanation-checks")]
+                assert!(
+                    DebugHelper::debug_check_propagations(
+                        num_trail_entries_before,
+                        propagator_id,
+                        &self.assignments_integer,
+                        &self.assignments_propositional,
+                        &self.variable_literal_mappings,
+                        &mut self.reason_store,
+                        &self.cp_propagators,
+                    ),
+                    "Inconsistency in explanation detected"
+                );
                 PropagationStatusOneStepCP::PropagationHappened
             }
         }
