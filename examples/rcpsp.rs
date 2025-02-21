@@ -139,7 +139,7 @@ impl Problem<SearchStrategies> for Rcpsp {
         solver_variables: &VariableMap,
     ) -> impl Brancher + 'static {
         match strategy {
-            SearchStrategies::Default => IndependentVariableValueBrancher::new(
+            SearchStrategies::Default => Box::new(IndependentVariableValueBrancher::new(
                 InputOrder::new(
                     solver_variables
                         .get_array(self.start_times)
@@ -148,7 +148,7 @@ impl Problem<SearchStrategies> for Rcpsp {
                         .collect(),
                 ),
                 InDomainMin,
-            ),
+            )) as Box<dyn Brancher>,
         }
     }
 

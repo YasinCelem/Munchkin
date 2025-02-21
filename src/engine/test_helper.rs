@@ -144,6 +144,29 @@ impl TestSolver {
         Ok(id)
     }
 
+    pub(crate) fn assert_domain<Var: IntegerVariable>(&self, var: Var, domain: Vec<i32>) {
+        if domain.is_empty() {
+            panic!("Domain provided to test solver is empty");
+        }
+        let min_domain = *domain.iter().min().unwrap();
+        let max_domain = *domain.iter().max().unwrap();
+
+        self.assert_bounds(var.clone(), min_domain, max_domain);
+        for value in min_domain..=max_domain {
+            if !domain.contains(&value) {
+                assert!(
+                    !self.contains(var.clone(), value),
+                    "{value} was in the domain while it should not be (provided domain {domain:?})"
+                )
+            } else {
+                assert!(
+                    self.contains(var.clone(), value),
+                    "{value} was not in the domain while it should be (provided domain {domain:?})"
+                )
+            }
+        }
+    }
+
     pub(crate) fn contains<Var: IntegerVariable>(&self, var: Var, value: i32) -> bool {
         var.contains(&self.assignments_integer, value)
     }
@@ -230,9 +253,9 @@ impl TestSolver {
             .expect("reason_ref should not be stale")
     }
 
-    pub(crate) fn assert_bounds(&self, var: DomainId, lb: i32, ub: i32) {
-        let actual_lb = self.lower_bound(var);
-        let actual_ub = self.upper_bound(var);
+    pub(crate) fn assert_bounds<Var: IntegerVariable>(&self, var: Var, lb: i32, ub: i32) {
+        let actual_lb = var.lower_bound(&self.assignments_integer);
+        let actual_ub = var.upper_bound(&self.assignments_integer);
 
         assert_eq!(
             (lb, ub), (actual_lb, actual_ub),

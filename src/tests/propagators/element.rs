@@ -9,7 +9,7 @@ fn test_simple_propagation() {
     let x = solver.new_variable(0, 10);
     let y = solver.new_variable(0, 0);
 
-    let index = solver.new_variable(0, 1);
+    let index = solver.new_variable(1, 2);
 
     let rhs = solver.new_variable(5, 5);
 
@@ -19,7 +19,7 @@ fn test_simple_propagation() {
 
     // We know that the index can not point to y (since it is fixed at 0)
     // and the rhs is fixed at 5 so the index should be propagated to 0
-    solver.assert_bounds(index, 0, 0);
+    solver.assert_bounds(index, 1, 1);
 
     let result = solver.propagate(propagator);
     assert!(result.is_ok());
@@ -35,7 +35,7 @@ fn test_simple_conflict() {
     let x = solver.new_variable(6, 10);
     let y = solver.new_variable(0, 4);
 
-    let index = solver.new_variable(0, 1);
+    let index = solver.new_variable(1, 2);
 
     let rhs = solver.new_variable(5, 5);
 

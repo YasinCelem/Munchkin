@@ -13,7 +13,7 @@ pub fn element<ElementVar: IntegerVariable + 'static>(
     array: impl Into<Box<[ElementVar]>>,
     rhs: impl IntegerVariable + 'static,
 ) -> impl Constraint {
-    ElementPropagator::new(index.offset(-1), array.into(), rhs)
+    ElementPropagator::new(index, array.into(), rhs)
 }
 
 pub fn element_decomposition<ElementVar: IntegerVariable + 'static>(

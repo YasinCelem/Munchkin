@@ -1,3 +1,5 @@
+use std::ops::DerefMut;
+
 #[cfg(doc)]
 use crate::basic_types::Random;
 use crate::basic_types::SolutionReference;
@@ -68,4 +70,38 @@ pub trait Brancher {
 
     /// This method is called whenever a restart is performed.
     fn on_restart(&mut self) {}
+}
+
+impl Brancher for Box<dyn Brancher> {
+    fn next_decision(&mut self, context: &mut SelectionContext) -> Option<Predicate> {
+        self.deref_mut().next_decision(context)
+    }
+
+    fn on_conflict(&mut self) {
+        self.deref_mut().on_conflict();
+    }
+
+    fn on_unassign_literal(&mut self, literal: Literal) {
+        self.deref_mut().on_unassign_literal(literal);
+    }
+
+    fn on_unassign_integer(&mut self, variable: DomainId, value: i32) {
+        self.deref_mut().on_unassign_integer(variable, value);
+    }
+
+    fn on_appearance_in_conflict_literal(&mut self, literal: Literal) {
+        self.deref_mut().on_appearance_in_conflict_literal(literal);
+    }
+
+    fn on_appearance_in_conflict_integer(&mut self, variable: DomainId) {
+        self.deref_mut().on_appearance_in_conflict_integer(variable);
+    }
+
+    fn on_solution(&mut self, solution: SolutionReference) {
+        self.deref_mut().on_solution(solution);
+    }
+
+    fn on_restart(&mut self) {
+        self.deref_mut().on_restart();
+    }
 }

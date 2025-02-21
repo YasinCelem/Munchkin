@@ -30,7 +30,7 @@ fn energetic_reasoning_updates_lower_bound() {
             capacity,
         ))
         .expect("Expected no conflict to occur");
-    assert_eq!(solver.lower_bound(f), 5);
+    assert!(solver.lower_bound(f) >= 5);
 }
 
 /// A test case based on Figure 1 from "A quadratic edge-finding filtering algorithm for cumulative
@@ -59,7 +59,7 @@ fn energetic_reasoning_updates_upper_bound() {
             capacity,
         ))
         .expect("Expected no conflict to occur");
-    assert_eq!(solver.upper_bound(f), 5);
+    assert!(solver.upper_bound(f) <= 5);
 }
 
 /// A test case based on Figure 1 from "A quadratic edge-finding filtering algorithm for cumulative

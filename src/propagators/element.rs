@@ -10,7 +10,7 @@ use crate::variables::IntegerVariable;
 /// Propagator for constraint `element([x_1, \ldots, x_n], i, e)`, where `x_j` are
 ///  variables, `i` is an integer variable, and `e` is a variable, which holds iff `x_i = e`
 ///
-/// Note that this propagator is 0-indexed
+/// Note that this propagator is 1-indexed
 pub(crate) struct ElementPropagator<IndexVar, ArrayVar, RhsVar> {
     index: IndexVar,
     array: Box<[ArrayVar]>,

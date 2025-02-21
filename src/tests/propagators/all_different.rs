@@ -20,10 +20,8 @@ fn test_bounds_propagation() {
         .new_propagator(AllDifferentPropagator::new(variables.into()))
         .expect("Expected no error");
 
+    solver.assert_domain(x5, vec![-2, -1, 4, 5, 6]);
     solver.assert_bounds(x6, 4, 6);
-    for value in 0..=3 {
-        assert!(solver.contains(x5, value));
-    }
 }
 
 #[test]
