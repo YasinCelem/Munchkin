@@ -280,6 +280,9 @@ class Args:
     allow_dirty: bool
     """If true, allows uncommitted git changes."""
 
+    explanation_checks: bool
+    """If true, enables the explanation checks"""
+
 
 @dataclass 
 class GitStatus:
@@ -337,7 +340,10 @@ def compile_executable(args: Args, experiment_dir: Path) -> Path | None:
     Compiles the executable and returns a Path to it.
     """
 
-    result = run(["cargo", "build", "--release", "--example", args.model])
+    if args.explanation_checks:
+        result = run(["cargo", "build", "--release", "--features", "explanation-checks", "--example", args.model])
+    else:
+        result = run(["cargo", "build", "--release", "--example", args.model])
 
     if result.returncode != 0:
         # The cargo output is forwarded so no need for an extra message here.

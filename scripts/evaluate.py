@@ -13,6 +13,11 @@ if __name__ == "__main__":
          action="store_true", 
          help="Allow uncommitted files when running the experiment."
     )
+    arg_parser.add_argument(
+         "--explanation-checks", 
+         action="store_true", 
+         help="Enable the checking of explanations."
+    )
 
     arg_parser.add_argument("model", help="The model to evaluate.", choices=MODELS)
     arg_parser.add_argument("timeout", help="Time budget for every instance in seconds.", type=int)
@@ -26,4 +31,5 @@ if __name__ == "__main__":
         timeout=args.timeout,
         flags=args.model_flags,
         allow_dirty=args.allow_dirty,
+        explanation_checks=args.explanation_checks
     ))

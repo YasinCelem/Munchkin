@@ -3,6 +3,16 @@ import subprocess
 
 from common import Args, ModelType, check_runs, evaluate
 
+def flatten(foo):
+    result = []
+    for x in foo:
+        if hasattr(x, '__iter__') and not isinstance(x, str):
+            for y in flatten(x):
+               result.append(y) 
+        else:
+            result.append(x)
+    return result
+
 MODELS = ["tsp", "rcpsp"]
 
 MODEL_TO_PROPAGATORS = {
@@ -84,6 +94,7 @@ def grade_propagator(propagator: str) -> int:
         timeout=INSTANCE_TIMEOUT,
         flags=["-G", propagator],
         allow_dirty=True,
+        explanation_checks=True,
     ))
     if context is None:
         return 0
@@ -111,8 +122,9 @@ def grade_conflict_analysis(learning: str, propagators: str, model: str) -> int:
     context = evaluate(Args(
         model=model,
         timeout=INSTANCE_TIMEOUT,
-        flags=["--features", "explanation-checks", "-G", propagators, "-C", learning],
+        flags=flatten([["-G", propagator] for propagator in propagators] + ["-C", learning]),
         allow_dirty=True,
+        explanation_checks=True,
     ))
     if context is None:
         return 0
@@ -140,8 +152,9 @@ def grade_minimisation(minimisation: str, propagators: str, model: str) -> int:
     context = evaluate(Args(
         model=model,
         timeout=INSTANCE_TIMEOUT,
-        flags=["--features", "explanation-checks", "-G", propagators, "-C", "unique-implication-point", "-M", minimisation],
+        flags=flatten([["-G", propagator] for propagator in propagators] + ["-C", "unique-implication-point", "-M", minimisation]),
         allow_dirty=True,
+        explanation_checks=True,
     ))
     if context is None:
         return 0
@@ -172,7 +185,7 @@ def run():
         for model in MODELS:
             for propagators in MODEL_TO_PROPAGATORS[model]:
                 print(f"Evaluating {learning} with {model} - {propagators}")
-                total_grade += grade_conflict_analysis(learning, ", ".join(propagators), model)
+                total_grade += grade_conflict_analysis(learning, propagators, model)
 
     for minimisation in MINIMISATION_TEST_MODULES.keys(): 
         print(f"Grading {minimisation}...")
