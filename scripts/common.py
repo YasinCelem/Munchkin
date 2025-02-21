@@ -8,9 +8,6 @@ import shutil
 import sys
 import json
 
-
-MODELS = ["tsp", "rcpsp", "rcpsp"]
-
 ModelType = Union[Literal["tsp"], Literal["rcpsp"]] 
 
 DATA_DIR = (Path(__file__).parent / ".." / "data").resolve()
