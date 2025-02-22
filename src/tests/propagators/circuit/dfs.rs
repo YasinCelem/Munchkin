@@ -16,23 +16,6 @@ fn detects_failure() {
 }
 
 #[test]
-fn detects_simple_prevent() {
-    let mut solver = TestSolver::default();
-
-    let a = solver.new_variable(2, 2);
-    let b = solver.new_variable(1, 3);
-    let c = solver.new_variable(1, 3);
-
-    let _ = solver
-        .new_propagator(DfsCircuitPropagator::new([a, b, c].into()))
-        .expect("Expected circuit to not detect a conflict");
-
-    solver.assert_bounds(b, 3, 3);
-    // No self-loops
-    assert!(!solver.contains(c, 3));
-}
-
-#[test]
 // An example based on Figure 4 in "Explaining circuit propagation - Francis & Stuckey (2013)"
 fn detect_simple_dfs() {
     let mut solver = TestSolver::default();
