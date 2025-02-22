@@ -1,14 +1,12 @@
 #![allow(unused, reason = "this file is a skeleton for the assignment")]
 
 use crate::basic_types::PropagationStatusCP;
-use crate::engine::cp::propagation::PropagationContextMut;
-use crate::engine::cp::propagation::Propagator;
-use crate::engine::cp::propagation::PropagatorInitialisationContext;
+use crate::engine::cp::propagation::{
+    PropagationContextMut, Propagator, PropagatorInitialisationContext,
+};
 use crate::predicates::PropositionalConjunction;
 use crate::variables::IntegerVariable;
-
-//added 3 crates
-use crate::conjunction; 
+use crate::conjunction;
 use crate::engine::cp::domain_events::DomainEvents;
 use crate::engine::cp::propagation::propagation_context::ReadDomains;
 
@@ -30,10 +28,10 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
     fn propagate(&self, mut context: PropagationContextMut) -> PropagationStatusCP {
         let n = self.successor.len();
 
-        // case 1: fixed variabes
-        // for all fixed variable, follow the chain using the fixed values
-        // if an early cycle is detected return a conflict
-
+        // --- Case 1: Fixed Variables ---
+        // For each fixed variable, follow its chain using its fixed (lower bound) value.
+        // The candidate values are 1-indexed; we subtract 1 to obtain an index.
+        // If the cycle found covers fewer than n nodes, propagation fails.
         for i in 0..n {
             if context.is_fixed(&self.successor[i]) {
                 let mut current = i;
@@ -47,42 +45,60 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                         break;
                     }
                     visited[current] = true;
-                    current = (context.lower_bound(&self.successor[current]) - 1) as usize;
+                    let next = context.lower_bound(&self.successor[current]);
+                    if next == 0 {
+                        // A candidate value of 0 is invalid.
+                        return Err(conjunction!().into());
+                    }
+                    // Convert candidate value to 0-index.
+                    current = (next - 1) as usize;
                 }
             }
         }
 
-        // case 2: unfixed variables
-        // for all unfixed variable, do a dfs extension for each 'candidate' value and return cyclesize
-        // choose lower bound strategy until a cycle is encountered
-        // remove lesser candidate for better performing candidate 
-        // if more candidates have maximum cyclesize, use the candidate with the highest value.
+        // --- Case 2: Unfixed Variables ---
+        // For each unfixed variable, we simulate the DFS chain for each candidate
+        // (each candidate value actually in the variable’s domain, between lower_bound and upper_bound).
+        // The simulation uses:
+        //  - For the starting variable, the candidate value (interpreted as 1-indexed, so candidate v gives index v-1).
+        //  - For subsequent variables, we always take the lower_bound (their fixed choice if fixed).
+        // We record the cycle size (the number of distinct nodes visited before a cycle is encountered)
+        // and then remove all candidates except the one with the maximal cycle size,
+        // breaking ties by choosing the highest candidate value.
         for i in 0..n {
             if !context.is_fixed(&self.successor[i]) {
                 let lb = context.lower_bound(&self.successor[i]);
                 let ub = context.upper_bound(&self.successor[i]);
                 let mut candidate_results = Vec::new();
-                // iterate over the entire variable interval domain
                 for candidate in lb..=ub {
                     if !context.contains(&self.successor[i], candidate) {
                         continue;
                     }
-                    // use dfs starting with candidate at variable i.
+                    // Guard: candidate value 0 is always invalid.
+                    if candidate == 0 {
+                        candidate_results.push((candidate, 0));
+                        continue;
+                    }
                     let cycle_size = {
                         let mut visited = vec![false; n];
                         visited[i] = true;
+                        // Start simulation: candidate (1-indexed) becomes index candidate-1.
                         let mut current = (candidate - 1) as usize;
-                        // follow the lower bound even if the variable is unfixed.
                         while !visited[current] {
                             visited[current] = true;
-                            current = (context.lower_bound(&self.successor[current]) - 1) as usize;
+                            let next = context.lower_bound(&self.successor[current]);
+                            if next == 0 {
+                                break;
+                            }
+                            current = (next - 1) as usize;
                         }
                         visited.iter().filter(|&&v| v).count()
                     };
                     candidate_results.push((candidate, cycle_size));
                 }
-                // determine and choose best cyclesize
                 if !candidate_results.is_empty() {
+                    // Choose the candidate with the maximal cycle size.
+                    // In case of ties, choose the candidate with the highest value.
                     let best_size = candidate_results.iter().map(|&(_, sz)| sz).max().unwrap();
                     let best_candidate = candidate_results
                         .iter()
@@ -90,9 +106,8 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                         .map(|&(cand, _)| cand)
                         .max()
                         .unwrap();
-                    // remove lesser candidates for better performing candidate
-                    for (cand, sz) in candidate_results {
-                        if sz < best_size || (sz == best_size && cand < best_candidate) {
+                    for (cand, _) in candidate_results {
+                        if cand != best_candidate {
                             context.remove(&self.successor[i], cand, conjunction!())?;
                         }
                     }
@@ -107,9 +122,8 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
         &mut self,
         init_context: &mut PropagatorInitialisationContext,
     ) -> Result<(), PropositionalConjunction> {
-        let n = self.successor.len();
-        for i in 0..n {
-            init_context.register(self.successor[i].clone(), DomainEvents::ASSIGN);
+        for var in self.successor.iter() {
+            init_context.register(var.clone(), DomainEvents::ASSIGN);
         }
         Ok(())
     }

@@ -1,17 +1,22 @@
 #![allow(unused, reason = "this file is a skeleton for the assignment")]
 
 use crate::basic_types::PropagationStatusCP;
-use crate::engine::cp::propagation::PropagationContextMut;
-use crate::engine::cp::propagation::Propagator;
-use crate::engine::cp::propagation::PropagatorInitialisationContext;
+use crate::conjunction;
+use crate::engine::cp::propagation::{
+    PropagationContextMut, Propagator, PropagatorInitialisationContext,
+};
 use crate::predicates::PropositionalConjunction;
 use crate::variables::IntegerVariable;
-
-//added 3 crates
-use crate::conjunction;
 use crate::engine::cp::domain_events::DomainEvents;
 use crate::engine::cp::propagation::propagation_context::ReadDomains;
+use crate::branching::value_selection::PhaseSaving;
+use crate::engine::constraint_satisfaction_solver;
 
+/// A forward-checking propagator for a circuit constraint.
+///
+/// This propagator does not “solve” the full circuit constraint. Instead, it
+/// focuses on propagation by filtering out candidate values that (if chosen)
+/// would immediately lead to an incomplete cycle.
 pub(crate) struct ForwardCheckingCircuitPropagator<Var> {
     successor: Box<[Var]>,
 }
@@ -25,55 +30,56 @@ impl<Var> ForwardCheckingCircuitPropagator<Var> {
 impl<Var: IntegerVariable + 'static> Propagator for ForwardCheckingCircuitPropagator<Var> {
     fn name(&self) -> &str {
         "ForwardCheckingCircuit"
-        //line above was first calles "DfsCircuit"
     }
 
     fn propagate(&self, mut context: PropagationContextMut) -> PropagationStatusCP {
         let n = self.successor.len();
 
-        // case 1: fixedvariables
-        // for all fixed variable, follow the chain using the fixed values
-        // if an early cycle is detected return a conflict
+        // --- Case 1: For variables that are fixed ---
+        // Follow the chain of fixed successors to check for cycles.
+        // If a cycle is detected that does not cover all nodes, we return a failure.
         for i in 0..n {
             if context.is_fixed(&self.successor[i]) {
                 let mut current = i;
                 let mut visited = vec![false; n];
                 while context.is_fixed(&self.successor[current]) {
                     if visited[current] {
-                        // cycle detected --> count nodes in cycle.
+                        // A cycle is detected. Count the nodes in the cycle.
                         let cycle_size = visited.iter().filter(|&&v| v).count();
                         if cycle_size < n {
-                            // short cycle return propagation fails
+                            // Incomplete cycle: propagation fails.
                             return Err(conjunction!().into());
                         }
                         break;
                     }
-                    //make it 1 index instead of 0 index
+                    visited[current] = true;
+                    // Subtract 1 to convert the domain value to a 0-index.
                     current = (context.lower_bound(&self.successor[current]) - 1) as usize;
                 }
             }
         }
-
-        // case 2: unfixed variables
-        // for all unfixed variable, try candidate
+        // --- Case 2: For variables that are not yet fixed ---
+        // For each unfixed variable, simulate each candidate.
         for i in 0..n {
             if !context.is_fixed(&self.successor[i]) {
                 let lb = context.lower_bound(&self.successor[i]);
                 let ub = context.upper_bound(&self.successor[i]);
                 for candidate in lb..=ub {
-                    // try a candidate for variable i.
+                    // Simulate the effect of choosing `candidate` for variable i.
                     let candidate_closes = {
-                        // set node i as visited
+                        // Mark node i as visited.
                         let mut visited = vec![false; n];
                         visited[i] = true;
-                        // index convert
+                        // Convert candidate value (1-indexed) to an index.
                         let mut current = (candidate - 1) as usize;
-                        // use lb strategy and use 0 index from 1 index
+                        // Follow the chain using the lower bounds.
                         while current < n && !visited[current] {
                             visited[current] = true;
+                            // Use the lower bound of successor[current] (converted to 0-index)
                             current = (context.lower_bound(&self.successor[current]) - 1) as usize;
                         }
-                        // close candidate causing short cycle
+                        // If we have looped back to i before visiting all nodes, then
+                        // choosing `candidate` would close an incomplete cycle.
                         current == i && visited.iter().filter(|&&v| v).count() < n
                     };
 
