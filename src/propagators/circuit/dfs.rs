@@ -1,37 +1,62 @@
 #![allow(unused, reason = "this file is a skeleton for the assignment")]
 
+/*!
+# Generative AI Usage
+
+I used generative AI tools (e.g., ChatGPT) during the development of this file for:
+1. **Outline of algorithms**:
+   - To generate an initial high‑level pseudocode for the DFS circuit propagator.
+2. **Code refinement**:
+   - To suggest improvements in function structure, variable naming, and documentation once the core logic was implemented.
+*/
+
+//! This module implements a DFS circuit propagator that enforces circuit constraints
+//! by exploring fixed and unfixed variables and pruning inconsistent candidate assignments.
+
 use crate::basic_types::PropagationStatusCP;
+use crate::conjunction;
+use crate::engine::cp::domain_events::DomainEvents;
+use crate::engine::cp::propagation::propagation_context::ReadDomains;
 use crate::engine::cp::propagation::{
     PropagationContextMut, Propagator, PropagatorInitialisationContext,
 };
 use crate::predicates::PropositionalConjunction;
 use crate::variables::IntegerVariable;
-use crate::conjunction;
-use crate::engine::cp::domain_events::DomainEvents;
-use crate::engine::cp::propagation::propagation_context::ReadDomains;
 
+/// Represents a DFS circuit propagator enforcing circuit constraints.
 pub(crate) struct DfsCircuitPropagator<Var> {
     successor: Box<[Var]>,
 }
 
 impl<Var> DfsCircuitPropagator<Var> {
+    /// Constructs a new DFS circuit propagator with the provided successor array.
     pub(crate) fn new(successor: Box<[Var]>) -> Self {
         Self { successor }
     }
 }
 
 impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
+    /// Returns the name of the propagator.
     fn name(&self) -> &str {
         "DfsCircuit"
     }
 
+    /// Propagates the circuit constraint by processing fixed and unfixed variables.
+    ///
+    /// # Propagation Details
+    ///
+    /// - **Case 1: Fixed Variables**
+    ///   - For each fixed variable, the propagator follows its chain using its lower bound value.
+    ///   - If a cycle is detected that does not cover all nodes, propagation fails.
+    ///
+    /// - **Case 2: Unfixed Variables**
+    ///   - For each unfixed variable, the DFS chain is simulated for each candidate in its domain.
+    ///   - The candidate with the maximal cycle size (or highest value in case of ties) is retained,
+    ///     and other candidates are pruned.
     fn propagate(&self, mut context: PropagationContextMut) -> PropagationStatusCP {
         let n = self.successor.len();
 
         // --- Case 1: Fixed Variables ---
-        // For each fixed variable, follow its chain using its fixed (lower bound) value.
-        // The candidate values are 1-indexed; we subtract 1 to obtain an index.
-        // If the cycle found covers fewer than n nodes, propagation fails.
         for i in 0..n {
             if context.is_fixed(&self.successor[i]) {
                 let mut current = i;
@@ -50,21 +75,13 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                         // A candidate value of 0 is invalid.
                         return Err(conjunction!().into());
                     }
-                    // Convert candidate value to 0-index.
+                    // Convert candidate value (1-indexed) to 0-index.
                     current = (next - 1) as usize;
                 }
             }
         }
 
         // --- Case 2: Unfixed Variables ---
-        // For each unfixed variable, we simulate the DFS chain for each candidate
-        // (each candidate value actually in the variable’s domain, between lower_bound and upper_bound).
-        // The simulation uses:
-        //  - For the starting variable, the candidate value (interpreted as 1-indexed, so candidate v gives index v-1).
-        //  - For subsequent variables, we always take the lower_bound (their fixed choice if fixed).
-        // We record the cycle size (the number of distinct nodes visited before a cycle is encountered)
-        // and then remove all candidates except the one with the maximal cycle size,
-        // breaking ties by choosing the highest candidate value.
         for i in 0..n {
             if !context.is_fixed(&self.successor[i]) {
                 let lb = context.lower_bound(&self.successor[i]);
@@ -97,8 +114,6 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                     candidate_results.push((candidate, cycle_size));
                 }
                 if !candidate_results.is_empty() {
-                    // Choose the candidate with the maximal cycle size.
-                    // In case of ties, choose the candidate with the highest value.
                     let best_size = candidate_results.iter().map(|&(_, sz)| sz).max().unwrap();
                     let best_candidate = candidate_results
                         .iter()
@@ -118,6 +133,9 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
         Ok(())
     }
 
+    /// Initialises the propagator at the root of the search tree.
+    ///
+    /// Registers each successor variable with the event type `ASSIGN`.
     fn initialise_at_root(
         &mut self,
         init_context: &mut PropagatorInitialisationContext,
