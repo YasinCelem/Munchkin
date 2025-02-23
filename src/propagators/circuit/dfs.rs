@@ -96,20 +96,23 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                     candidate_results.push((candidate, cycle_size));
                 }
                 if !candidate_results.is_empty() {
-                    // Choose the candidate with the maximal cycle size.
-                    // In case of ties, choose the candidate with the highest value.
+                    // Only prune if at least one candidate produces a full cycle.
                     let best_size = candidate_results.iter().map(|&(_, sz)| sz).max().unwrap();
-                    let best_candidate = candidate_results
-                        .iter()
-                        .filter(|&&(_, sz)| sz == best_size)
-                        .map(|&(cand, _)| cand)
-                        .max()
-                        .unwrap();
-                    for (cand, _) in candidate_results {
-                        if cand != best_candidate {
-                            context.remove(&self.successor[i], cand, conjunction!())?;
+                    if best_size == n {
+                        // In case of ties, choose the candidate with the highest value.
+                        let best_candidate = candidate_results
+                            .iter()
+                            .filter(|&&(_, sz)| sz == best_size)
+                            .map(|&(cand, _)| cand)
+                            .max()
+                            .unwrap();
+                        for (cand, _) in candidate_results {
+                            if cand != best_candidate {
+                                context.remove(&self.successor[i], cand, conjunction!())?;
+                            }
                         }
                     }
+                    // Otherwise, if no candidate yields a complete circuit, leave the domain untouched.
                 }
             }
         }
