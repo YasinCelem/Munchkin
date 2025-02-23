@@ -36,7 +36,7 @@ impl<Var: IntegerVariable + 'static> Propagator for ForwardCheckingCircuitPropag
                 let mut visited = HashSet::new();
 
                 chain.push(current);
-                visited.insert(current);
+                let _= visited.insert(current);
 
                 while context.is_fixed(&self.successor[current]) {
                     let next = context.lower_bound(&self.successor[current]) as usize;
@@ -44,7 +44,7 @@ impl<Var: IntegerVariable + 'static> Propagator for ForwardCheckingCircuitPropag
                         break;
                     }
                     chain.push(next);
-                    visited.insert(next);
+                    let _=visited.insert(next);
                     current = next;
                 }
                 if chain.len() < n {
