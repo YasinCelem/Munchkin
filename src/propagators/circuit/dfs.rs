@@ -76,7 +76,6 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                     }
                     // Guard: candidate value 0 is always invalid.
                     if candidate == 0 {
-                        candidate_results.push((candidate, 0));
                         continue;
                     }
                     let cycle_size = {
