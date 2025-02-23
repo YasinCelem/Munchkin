@@ -57,14 +57,10 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
         }
 
         // --- Case 2: Unfixed Variables ---
-        // For each unfixed variable, we simulate the DFS chain for each candidate
-        // (each candidate value actually in the variable’s domain, between lower_bound and upper_bound).
-        // The simulation uses:
-        //  - For the starting variable, the candidate value (interpreted as 1-indexed, so candidate v gives index v-1).
-        //  - For subsequent variables, we always take the lower_bound (their fixed choice if fixed).
-        // We record the cycle size (the number of distinct nodes visited before a cycle is encountered)
-        // and then remove all candidates except the one with the maximal cycle size,
-        // breaking ties by choosing the highest candidate value.
+        // For each unfixed variable, simulate the DFS chain for each candidate value in its domain.
+        // Record the cycle size (i.e. the number of distinct nodes visited before a cycle is encountered)
+        // and then prune (remove) all candidates except the one with the maximal cycle size.
+        // However, we only prune if at least one candidate produces a complete circuit (cycle size == n).
         for i in 0..n {
             if !context.is_fixed(&self.successor[i]) {
                 let lb = context.lower_bound(&self.successor[i]);
@@ -96,10 +92,9 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                     candidate_results.push((candidate, cycle_size));
                 }
                 if !candidate_results.is_empty() {
-                    // Only prune if at least one candidate produces a full cycle.
                     let best_size = candidate_results.iter().map(|&(_, sz)| sz).max().unwrap();
+                    // Only prune if a candidate produces a complete circuit.
                     if best_size == n {
-                        // In case of ties, choose the candidate with the highest value.
                         let best_candidate = candidate_results
                             .iter()
                             .filter(|&&(_, sz)| sz == best_size)
@@ -112,7 +107,7 @@ impl<Var: IntegerVariable + 'static> Propagator for DfsCircuitPropagator<Var> {
                             }
                         }
                     }
-                    // Otherwise, if no candidate yields a complete circuit, leave the domain untouched.
+                    // If no candidate produces a complete circuit, we leave the domain unchanged.
                 }
             }
         }
